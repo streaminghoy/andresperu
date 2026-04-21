@@ -12,7 +12,7 @@
             background: #000; color: #fff; height: 100vh; overflow: hidden;
         }
 
-        /* ===== MODO EDITOR ===== */
+        /* ===== MODO EDITOR INICIAL ===== */
         #editor {
             padding: 20px; max-width: 600px; margin: 0 auto;
             height: 100vh; display: flex; flex-direction: column;
@@ -67,6 +67,31 @@
             will-change: transform;
         }
 
+        /* ===== EDITOR EN VIVO ===== */
+        #editorVivo {
+            display: none; position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%; z-index: 500;
+            background: rgba(0,0,0,0.92); backdrop-filter: blur(12px);
+            padding: 20px; flex-direction: column;
+        }
+        #editorVivo h2 { color: #00d4ff; font-size: 1.1rem; margin-bottom: 12px; text-align: center; }
+        #editorVivo textarea {
+            flex: 1; width: 100%; background: #111; border: 1px solid #333;
+            border-radius: 10px; color: #fff; padding: 16px; font-size: 1.1rem;
+            line-height: 1.5; resize: none; margin-bottom: 12px;
+        }
+        .editorBtns {
+            display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;
+        }
+        .editorBtns button {
+            padding: 14px 24px; border: none; border-radius: 10px;
+            font-size: 1rem; font-weight: 700; cursor: pointer;
+        }
+        .btn-save { background: #00ff88; color: #000; }
+        .btn-save:active { background: #00cc6a; }
+        .btn-cancel { background: #444; color: #fff; }
+        .btn-cancel:active { background: #555; }
+
         /* ===== CONTROLES FLOTANTES ===== */
         #controls {
             position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
@@ -100,7 +125,6 @@
         .status.waiting { background: #2a2200; color: #ffcc00; border: 1px solid #443300; }
         .status.error { background: #220000; color: #ff5555; border: 1px solid #440000; }
 
-        /* Canvas oculto para captura */
         #captureCanvas {
             position: fixed; top: -9999px; left: -9999px;
         }
@@ -108,10 +132,10 @@
 </head>
 <body>
 
-<!-- ===== MODO EDITOR ===== -->
+<!-- ===== EDITOR INICIAL ===== -->
 <div id="editor">
     <h1>📡 Teleprompter → OBS</h1>
-    <p class="sub">Escribí tu guion, iniciá el teleprompter y transmití a OBS</p>
+    <p class="sub">Escribí tu guion, iniciá y transmití a OBS</p>
 
     <div class="card">
         <div style="font-size: 0.8rem; color: #888; text-align:center;">Código de sala</div>
@@ -148,13 +172,23 @@ Gracias por acompañarnos.</textarea>
     <div id="prompterText"></div>
 </div>
 
-<!-- Canvas oculto 1920x1080 -->
+<!-- ===== EDITOR EN VIVO ===== -->
+<div id="editorVivo">
+    <h2>✏️ Editar guion en vivo</h2>
+    <textarea id="textoVivo"></textarea>
+    <div class="editorBtns">
+        <button class="btn-save" onclick="guardarEdicion()">💾 Guardar y continuar</button>
+        <button class="btn-cancel" onclick="cancelarEdicion()">✕ Cancelar</button>
+    </div>
+</div>
+
 <canvas id="captureCanvas" width="1920" height="1080"></canvas>
 
-<!-- Controles flotantes -->
+<!-- ===== CONTROLES FLOTANTES ===== -->
 <div id="controls" style="display:none;">
     <button onclick="togglePlay()" id="btnPlay">⏸ Pausa</button>
     <button onclick="resetScroll()">⏮ Inicio</button>
+    <button onclick="abrirEditorVivo()">✏️ Editar</button>
     <label>Vel: <span id="valVel">3</span></label>
     <button onclick="cambiarVel(-0.5)">-</button>
     <button onclick="cambiarVel(0.5)">+</button>
@@ -182,11 +216,11 @@ Gracias por acompañarnos.</textarea>
 
     /* ===== TELEPROMPTER ===== */
     let scrolling = false, posY = 0, vel = 3, animFrame;
-    let textoOriginal = '';
+    let textoActual = '';
 
     function iniciarTeleprompter() {
-        textoOriginal = document.getElementById('textoInput').value;
-        if (!textoOriginal.trim()) return alert('Escribí algo de texto primero');
+        textoActual = document.getElementById('textoInput').value;
+        if (!textoActual.trim()) return alert('Escribí algo de texto primero');
 
         vel = parseFloat(document.getElementById('velocidad').value);
         const tam = document.getElementById('tamano').value;
@@ -198,9 +232,8 @@ Gracias por acompañarnos.</textarea>
         document.getElementById('btnTransmitir').style.display = 'block';
 
         const el = document.getElementById('prompterText');
-        el.textContent = textoOriginal;
+        el.textContent = textoActual;
         el.style.fontSize = tam + 'px';
-        el.style.top = '100%';
         if (espejo) el.style.transform = 'scaleX(-1)';
 
         posY = window.innerHeight;
@@ -214,7 +247,9 @@ Gracias por acompañarnos.</textarea>
     function aplicarTransform() {
         const espejo = document.getElementById('espejo').value === 'si';
         const el = document.getElementById('prompterText');
-        el.style.transform = espejo ? `translateY(${posY}px) scaleX(-1)` : `translateY(${posY}px)`;
+        el.style.transform = espejo
+            ? `translateY(${posY}px) scaleX(-1)`
+            : `translateY(${posY}px)`;
     }
 
     function scrollLoop() {
@@ -257,7 +292,27 @@ Gracias por acompañarnos.</textarea>
         document.getElementById('btnTransmitir').textContent = '🔴 Transmitir a OBS';
     }
 
-    /* ===== TRANSMISIÓN CON CANVAS ===== */
+    /* ===== EDITOR EN VIVO ===== */
+    function abrirEditorVivo() {
+        scrolling = false;
+        document.getElementById('btnPlay').textContent = '▶ Play';
+        document.getElementById('textoVivo').value = textoActual;
+        document.getElementById('editorVivo').style.display = 'flex';
+    }
+
+    function guardarEdicion() {
+        textoActual = document.getElementById('textoVivo').value;
+        document.getElementById('prompterText').textContent = textoActual;
+        document.getElementById('editorVivo').style.display = 'none';
+        // El scroll queda pausado, el operador toca Play cuando quiera
+    }
+
+    function cancelarEdicion() {
+        document.getElementById('editorVivo').style.display = 'none';
+        // Vuelve al teleprompter, el scroll sigue pausado
+    }
+
+    /* ===== TRANSMISIÓN ===== */
     const canvas = document.getElementById('captureCanvas');
     const ctx = canvas.getContext('2d');
     let streamActivo = null, llamadaActiva = null, transmitiendo = false;
@@ -281,7 +336,6 @@ Gracias por acompañarnos.</textarea>
         if (tipo !== 'live') setTimeout(() => el.style.display = 'none', 5000);
     }
 
-    /* Renderiza el teleprompter en el canvas 1920x1080 */
     function renderCanvas() {
         const w = 1920, h = 1080;
         ctx.fillStyle = '#000000';
@@ -296,12 +350,11 @@ Gracias por acompañarnos.</textarea>
         const espejo = document.getElementById('espejo').value === 'si';
         if (espejo) { ctx.translate(w, 0); ctx.scale(-1, 1); }
 
-        // Mapear posición del teleprompter visible al canvas
         const viewportH = window.innerHeight;
         const escala = w / window.innerWidth;
         const offsetY = (posY - viewportH) * escala + h;
 
-        const lineas = textoOriginal.split('\n');
+        const lineas = textoActual.split('\n');
         const lineHeight = fontSize * 1.5;
         let y = offsetY;
         const maxW = w * 0.85;
@@ -333,15 +386,12 @@ Gracias por acompañarnos.</textarea>
 
     function iniciarTransmision() {
         if (!canvas.captureStream) {
-            mostrarEstado('Tu navegador no soporta transmisión desde canvas. Actualizá iOS.', 'error');
+            mostrarEstado('Tu navegador no soporta transmisión desde canvas.', 'error');
             return;
         }
-
         try {
             const stream = canvas.captureStream(30);
             streamActivo = stream;
-
-            // Loop de renderizado
             renderInterval = setInterval(renderCanvas, 33);
 
             const receptorId = `rec-${sala}`;
@@ -349,7 +399,6 @@ Gracias por acompañarnos.</textarea>
             llamadaActiva = call;
 
             const btn = document.getElementById('btnTransmitir');
-
             if (call) {
                 conectado(btn);
             } else {
